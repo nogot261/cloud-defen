@@ -105,170 +105,159 @@ USE_LLM=1 OLLAMA_MODEL=qwen3:8b uvicorn app.main:app --reload
 
 ## Формула риска
 
-Итоговый риск считается как сумма баллов всех сработавших risk-сигналов с ограничением сверху:
-
-$$
-\mathrm{risk\_score} = \min \left( \sum \mathrm{risk\_signal\_points}, 100 \right)
-$$
-
-В математической форме:
+Итоговый риск считается как сумма весов всех сработавших признаков. Каждый признак задается логическим условием. Если условие истинно, его вес добавляется к итоговой оценке.
 
 Пусть:
 
 $$
-S = \{s_1, s_2, \ldots, s_n\}
+S = \{s_{1}, s_{2}, \ldots, s_{n}\}
 $$
 
 где $S$ - множество risk-сигналов.
 
-Для каждого сигнала $s_i$ задан вес $w_i$ и логическое условие $C_i(x)$.
-
-Индикатор срабатывания сигнала:
+Для каждого сигнала $s_{i}$ задаются:
 
 $$
-I_i(x)=
+w_{i} \in \mathbb{R}_{+}
+$$
+
+$$
+C_{i}(x) \in \{0, 1\}
+$$
+
+где $w_{i}$ - вес сигнала, а $C_{i}(x)$ - логическое условие, проверяемое на данных текущей сессии $x$.
+
+Индикатор срабатывания:
+
+$$
+I_{i}(x)=
 \begin{cases}
-1, & \text{если } C_i(x) = \mathrm{true}, \\
-0, & \text{если } C_i(x) = \mathrm{false}.
+1, & C_{i}(x)=\mathrm{true}, \\
+0, & C_{i}(x)=\mathrm{false}.
 \end{cases}
 $$
 
 Итоговая формула:
 
 $$
-\mathrm{risk\_score}(x)
-=
-\min \left(
-100,
-\sum_{i=1}^{n} w_i \cdot I_i(x)
-\right)
+R(x)=\min\left(100,\sum_{i=1}^{n} w_{i} I_{i}(x)\right)
 $$
 
-Где $x$ - текущий набор данных сессии:
+Здесь $R(x)$ - итоговый `risk_score`.
+
+### Вектор признаков
+
+Текущая сессия описывается набором признаков:
 
 $$
-\begin{aligned}
-x = (&ip,\ asn,\ country,\ timezone,\ accept\_language,\\
-&previous\_countries,\ failed\_logins\_last\_5\_min,\\
-&downloaded\_docs\_last\_10\_min,\ protected\_requests\_last\_2\_min,\\
-&webrtc\_leak,\ ipv6\_enabled,\ browser\_fingerprint\_hash,\\
-&device\_profile,\ network\_profile,\ previous\_snapshot)
-\end{aligned}
+x=(IP, ASN, CTR, TZ, LANG, Hist, FL5, DL10, RQ2, WL, V6, FP, Dev, Net, Prev)
 $$
 
-Уровень риска:
+Обозначения вынесены в таблицу, чтобы в LaTeX не было служебных имен с нижним подчеркиванием:
 
-Формально уровень риска задается кусочной функцией:
+| Обозначение | Смысл |
+|---|---|
+| `IP` | текущий IP-адрес |
+| `ASN` | провайдер или автономная система |
+| `CTR` | страна IP |
+| `TZ` | timezone браузера |
+| `LANG` | основной язык браузера |
+| `Hist` | история стран аккаунта |
+| `FL5` | число неудачных входов за 5 минут |
+| `DL10` | число скачанных документов за 10 минут |
+| `RQ2` | число запросов к защищенным ресурсам за 2 минуты |
+| `WL` | наличие WebRTC leak |
+| `V6` | наличие IPv6 |
+| `FP` | browser fingerprint hash |
+| `Dev` | профиль устройства |
+| `Net` | профиль сети |
+| `Prev` | предыдущий snapshot сессии |
+
+### Уровень риска
+
+Уровень риска задается кусочной функцией:
 
 $$
-\mathrm{level}(r)=
+Level(R)=
 \begin{cases}
-\mathrm{low},      & 0 \le r < 25, \\
-\mathrm{medium},   & 25 \le r < 50, \\
-\mathrm{high},     & 50 \le r < 75, \\
-\mathrm{critical}, & 75 \le r \le 100.
+\mathrm{low},      & 0 \le R < 25, \\
+\mathrm{medium},   & 25 \le R < 50, \\
+\mathrm{high},     & 50 \le R < 75, \\
+\mathrm{critical}, & 75 \le R \le 100.
 \end{cases}
 $$
 
 ### Логические условия risk-сигналов
 
-Ниже приведены основные условия в логической форме. Обозначения:
+Для краткости используются следующие обозначения:
+
+| Обозначение | Смысл |
+|---|---|
+| `NT` | тип сети |
+| `TZC` | страна, соответствующая timezone |
+| `LC` | регион языка браузера |
+| `IPprev` | IP из предыдущей проверки |
+| `IPcur` | текущий IP |
+| `CTRprev` | страна из предыдущей проверки |
+| `CTRcur` | текущая страна |
+| `ASNprev` | ASN из предыдущей проверки |
+| `ASNcur` | текущий ASN |
+| `FPprev` | fingerprint из предыдущей проверки |
+| `FPcur` | текущий fingerprint |
+| `GPUprev` | WebGL renderer из предыдущей проверки |
+| `GPUcur` | текущий WebGL renderer |
+
+Основные условия:
 
 $$
 \begin{aligned}
-NT   &= network\_type \\
-PC   &= previous\_countries \\
-PS   &= previous\_snapshot \\
-FP   &= browser\_fingerprint\_hash \\
-TZC  &= country\_from\_timezone(timezone) \\
-LANG &= language\_region(accept\_language)
+C_{1}  &\equiv NT=\text{datacenter/hosting}, \\
+C_{2}  &\equiv Hist\ne\varnothing \land CTRcur\notin Hist, \\
+C_{3}  &\equiv Seen\land Hist\ne\varnothing\land CTRcur\notin Hist, \\
+C_{4}  &\equiv TZC\ne\varnothing\land CTRcur\ne\mathrm{UNKNOWN}\land TZC\ne CTRcur, \\
+C_{5}  &\equiv LC\ne\varnothing\land LC\notin CommonLang(CTRcur), \\
+C_{6}  &\equiv FL5>10, \\
+C_{7}  &\equiv DL10>30, \\
+C_{8}  &\equiv RQ2>120, \\
+C_{9}  &\equiv WL=1, \\
+C_{10} &\equiv V6=0.
 \end{aligned}
 $$
 
 $$
 \begin{aligned}
-C_{\mathrm{datacenter}} &\equiv NT = \text{datacenter/hosting} \\
-C_{\mathrm{new\_country}} &\equiv PC \ne \varnothing \land country \notin PC \\
-C_{\mathrm{known\_device\_new\_region}} &\equiv device\_seen\_before \land PC \ne \varnothing \land country \notin PC \\
-C_{\mathrm{timezone\_mismatch}} &\equiv TZC \ne \varnothing \land country \ne \mathrm{UNKNOWN} \land TZC \ne country \\
-C_{\mathrm{language\_mismatch}} &\equiv LANG \ne \varnothing \land LANG \notin common\_language\_regions(country) \\
-C_{\mathrm{failed\_logins}} &\equiv failed\_logins\_last\_5\_min > 10 \\
-C_{\mathrm{mass\_download}} &\equiv downloaded\_docs\_last\_10\_min > 30 \\
-C_{\mathrm{api\_anomaly}} &\equiv protected\_requests\_last\_2\_min > 120 \\
-C_{\mathrm{webrtc\_leak}} &\equiv webrtc\_leak = true \\
-C_{\mathrm{no\_ipv6}} &\equiv ipv6\_enabled = false
+C_{11} &\equiv IPprev\ne\varnothing\land IPcur\ne\varnothing\land IPprev\ne IPcur, \\
+C_{12} &\equiv CTRprev\ne\varnothing\land CTRcur\ne\varnothing\land CTRprev\ne CTRcur, \\
+C_{13} &\equiv ASNprev\ne\varnothing\land ASNcur\ne\varnothing\land ASNprev\ne ASNcur, \\
+C_{14} &\equiv TZprev\ne TZcur\land \neg C_{12}, \\
+C_{15} &\equiv FPprev=FPcur\land (C_{11}\lor C_{12}\lor C_{13}), \\
+C_{16} &\equiv GPUprev\ne\varnothing\land GPUcur\ne\varnothing\land GPUprev\ne GPUcur, \\
+C_{17} &\equiv Conn\in\{\mathrm{cellular},\mathrm{none}\}\land NT=\text{datacenter/hosting}, \\
+C_{18} &\equiv Touch>0\land Platform=\mathrm{Windows}, \\
+C_{19} &\equiv |Skew|>120000, \\
+C_{20} &\equiv Bat\le10\land Chg=0, \\
+C_{21} &\equiv BatAPI=0, \\
+C_{22} &\equiv Heap>80, \\
+C_{23} &\equiv Lag>80.
 \end{aligned}
 $$
 
+Пример отдельного вклада для признака “то же устройство, другая сеть”:
+
 $$
-\begin{aligned}
-C_{\mathrm{ip\_changed}} &\equiv PS.ip \ne \varnothing \land ip \ne \varnothing \land PS.ip \ne ip \\
-C_{\mathrm{country\_changed}} &\equiv PS.country \ne \varnothing \land country \ne \varnothing \land PS.country \ne country \\
-C_{\mathrm{asn\_changed}} &\equiv PS.asn \ne \varnothing \land asn \ne \varnothing \land PS.asn \ne asn \\
-C_{\mathrm{timezone\_changed\_without\_country}} &\equiv PS.timezone \ne timezone \land \neg C_{\mathrm{country\_changed}} \\
-C_{\mathrm{same\_device\_new\_network}} &\equiv FP \ne \varnothing \land PS.browser\_fingerprint\_hash = FP \\
-&\quad \land (C_{\mathrm{ip\_changed}} \lor C_{\mathrm{country\_changed}} \lor C_{\mathrm{asn\_changed}}) \\
-C_{\mathrm{gpu\_changed}} &\equiv PS.device\_profile.webgl\_renderer \ne \varnothing \\
-&\quad \land device\_profile.webgl\_renderer \ne \varnothing \\
-&\quad \land PS.device\_profile.webgl\_renderer \ne device\_profile.webgl\_renderer
-\end{aligned}
+r_{15}=20\cdot\mathbb{1}\left[FPprev=FPcur\land(IPprev\ne IPcur\lor CTRprev\ne CTRcur\lor ASNprev\ne ASNcur)\right]
 $$
+
+Полная формула риска:
 
 $$
 \begin{aligned}
-C_{\mathrm{network\_type\_conflict}} &\equiv network\_profile.connection\_type \in \{\mathrm{cellular}, \mathrm{none}\} \\
-&\quad \land NT = \text{datacenter/hosting} \\
-C_{\mathrm{hybrid\_fingerprint}} &\equiv device\_profile.touch\_points > 0 \land \text{Win} \in device\_profile.platform \\
-C_{\mathrm{clock\_skew}} &\equiv |device\_profile.clock.server\_skew\_ms| > 120000 \\
-C_{\mathrm{low\_battery}} &\equiv battery.supported \land battery.level\_percent \le 10 \land \neg battery.charging \\
-C_{\mathrm{battery\_api\_hidden}} &\equiv battery.supported = false \\
-C_{\mathrm{high\_js\_heap}} &\equiv performance.js\_heap\_usage\_percent > 80 \\
-C_{\mathrm{event\_loop\_lag}} &\equiv performance.event\_loop\_lag\_ms > 80
-\end{aligned}
-$$
-
-Таким образом, например, вклад признака “то же устройство, другая сеть” считается так:
-
-$$
-r_{\mathrm{same\_device\_new\_network}}
-=
-20 \cdot
-\mathbb{1}
-\left[
-FP = PS.browser\_fingerprint\_hash
-\land
-(ip \ne PS.ip \lor country \ne PS.country \lor asn \ne PS.asn)
-\right]
-$$
-
-А общий риск можно разложить как:
-
-$$
-\begin{aligned}
-\mathrm{risk\_score} = \min(100,\;&
-25I(C_{\mathrm{datacenter}})
-+15I(C_{\mathrm{new\_country}})
-+15I(C_{\mathrm{known\_device\_new\_region}}) \\
-&+10I(C_{\mathrm{timezone\_mismatch}})
-+5I(C_{\mathrm{language\_mismatch}})
-+20I(C_{\mathrm{failed\_logins}}) \\
-&+20I(C_{\mathrm{mass\_download}})
-+10I(C_{\mathrm{api\_anomaly}})
-+10I(C_{\mathrm{webrtc\_leak}})
-+2I(C_{\mathrm{no\_ipv6}}) \\
-&+18I(C_{\mathrm{ip\_changed}})
-+18I(C_{\mathrm{country\_changed}})
-+12I(C_{\mathrm{asn\_changed}}) \\
-&+8I(C_{\mathrm{timezone\_changed\_without\_country}})
-+20I(C_{\mathrm{same\_device\_new\_network}})
-+10I(C_{\mathrm{gpu\_changed}}) \\
-&+8I(C_{\mathrm{network\_type\_conflict}})
-+4I(C_{\mathrm{hybrid\_fingerprint}})
-+10I(C_{\mathrm{clock\_skew}}) \\
-&+4I(C_{\mathrm{low\_battery}})
-+1I(C_{\mathrm{battery\_api\_hidden}})
-+5I(C_{\mathrm{high\_js\_heap}})
-+5I(C_{\mathrm{event\_loop\_lag}})
+R(x)=\min(100,\;&
+25I(C_{1})+15I(C_{2})+15I(C_{3})+10I(C_{4})+5I(C_{5}) \\
+&+20I(C_{6})+20I(C_{7})+10I(C_{8})+10I(C_{9})+2I(C_{10}) \\
+&+18I(C_{11})+18I(C_{12})+12I(C_{13})+8I(C_{14})+20I(C_{15}) \\
+&+10I(C_{16})+8I(C_{17})+4I(C_{18})+10I(C_{19}) \\
+&+4I(C_{20})+1I(C_{21})+5I(C_{22})+5I(C_{23})
 )
 \end{aligned}
 $$
@@ -316,7 +305,7 @@ $$
 Тогда:
 
 $$
-\mathrm{risk\_score}
+R
 =
 \min(25 + 15 + 20 + 20 + 20,\;100)
 =
@@ -324,57 +313,48 @@ $$
 $$
 
 $$
-\mathrm{risk\_level} = \mathrm{critical}
+Level(R) = \mathrm{critical}
 $$
 
 ## Формула экспозиции
 
-Экспозиция показывает, насколько много признаков браузер и сеть раскрывают для идентификации или антифрод-анализа.
-
-$$
-\mathrm{exposure\_score}
-=
-\min \left( \sum \mathrm{exposure\_finding\_points}, 100 \right)
-$$
-
-Математическая запись аналогична risk-модели:
+Экспозиция показывает, насколько много признаков браузер и сеть раскрывают для идентификации, связывания повторных визитов или антифрод-анализа.
 
 Пусть:
 
 $$
-E = \{e_1, e_2, \ldots, e_m\}
+E = \{e_{1},e_{2},\ldots,e_{m}\}
 $$
 
 где $E$ - множество exposure-findings.
 
-Для каждого finding $e_j$ задан вес $v_j$ и условие $D_j(x)$.
+Для каждого finding $e_{j}$ задаются вес $v_{j}$ и логическое условие $D_{j}(x)$.
 
 $$
-J_j(x)=
+J_{j}(x)=
 \begin{cases}
-1, & \text{если } D_j(x) = \mathrm{true}, \\
-0, & \text{если } D_j(x) = \mathrm{false}.
+1, & D_{j}(x)=\mathrm{true}, \\
+0, & D_{j}(x)=\mathrm{false}.
 \end{cases}
 $$
 
+Итоговая формула:
+
 $$
-\mathrm{exposure\_score}(x)
-=
-\min \left(
-100,
-\sum_{j=1}^{m} v_j \cdot J_j(x)
-\right)
+ES(x)=\min\left(100,\sum_{j=1}^{m}v_{j}J_{j}(x)\right)
 $$
+
+Здесь $ES(x)$ - итоговый `exposure_score`.
 
 Уровень экспозиции:
 
 $$
-\mathrm{exposure\_level}(e)=
+ExposureLevel(ES)=
 \begin{cases}
-\mathrm{low},      & 0 \le e < 25, \\
-\mathrm{medium},   & 25 \le e < 50, \\
-\mathrm{high},     & 50 \le e < 75, \\
-\mathrm{critical}, & 75 \le e \le 100.
+\mathrm{low},      & 0\le ES<25, \\
+\mathrm{medium},   & 25\le ES<50, \\
+\mathrm{high},     & 50\le ES<75, \\
+\mathrm{critical}, & 75\le ES\le100.
 \end{cases}
 $$
 
@@ -382,57 +362,41 @@ $$
 
 $$
 \begin{aligned}
-D_{\mathrm{vpn\_like\_network}} &\equiv NT = \text{datacenter/hosting} \\
-D_{\mathrm{webrtc\_candidates}} &\equiv webrtc\_leak = true \\
-D_{\mathrm{no\_ipv6}} &\equiv ipv6\_enabled = false \\
-D_{\mathrm{timezone\_ip\_conflict}} &\equiv TZC \ne \varnothing \land TZC \ne country \\
-D_{\mathrm{language\_identifies\_user}} &\equiv LANG \ne \varnothing \land LANG \ne country \\
-D_{\mathrm{network\_changed\_same\_device}} &\equiv FP = PS.browser\_fingerprint\_hash \\
-&\quad \land (ip \ne PS.ip \lor country \ne PS.country \lor asn \ne PS.asn) \\
-D_{\mathrm{webgl\_identifies\_device}} &\equiv device\_profile.webgl\_renderer \ne \varnothing \\
-D_{\mathrm{webgl\_hidden}} &\equiv device\_profile.webgl\_supported = false \\
-D_{\mathrm{canvas\_available}} &\equiv canvas\_hash \ne \varnothing \land canvas\_hash \ne \mathrm{unavailable} \\
-D_{\mathrm{audio\_available}} &\equiv audio\_hash \ne \varnothing \land audio\_hash \notin \{\mathrm{unavailable}, \mathrm{blocked}\}
+D_{1}  &\equiv NT=\text{datacenter/hosting}, \\
+D_{2}  &\equiv WL=1, \\
+D_{3}  &\equiv V6=0, \\
+D_{4}  &\equiv TZC\ne\varnothing\land TZC\ne CTRcur, \\
+D_{5}  &\equiv LC\ne\varnothing\land LC\ne CTRcur, \\
+D_{6}  &\equiv FPprev=FPcur\land(IPprev\ne IPcur\lor CTRprev\ne CTRcur\lor ASNprev\ne ASNcur), \\
+D_{7}  &\equiv GPUcur\ne\varnothing, \\
+D_{8}  &\equiv WebGL=0, \\
+D_{9}  &\equiv Canvas\ne\varnothing, \\
+D_{10} &\equiv Audio\ne\varnothing\land Audio\notin\{\mathrm{unavailable},\mathrm{blocked}\}.
 \end{aligned}
 $$
 
 $$
 \begin{aligned}
-D_{\mathrm{ua\_hints\_available}} &\equiv ua\_hints.available = true \\
-D_{\mathrm{cpu\_threads\_available}} &\equiv hardware\_concurrency \ne \varnothing \\
-D_{\mathrm{ram\_bucket\_available}} &\equiv device\_memory\_gb \ne \varnothing \\
-D_{\mathrm{battery\_available}} &\equiv battery.supported = true \\
-D_{\mathrm{clock\_skew}} &\equiv |clock.server\_skew\_ms| > 120000 \\
-D_{\mathrm{js\_heap\_available}} &\equiv performance.memory.supported = true \\
-D_{\mathrm{event\_loop\_lag}} &\equiv performance.event\_loop\_lag\_ms > 80 \\
-D_{\mathrm{network\_info\_available}} &\equiv network\_profile.effective\_type \ne \varnothing \\
-&\quad \lor network\_profile.connection\_type \ne \varnothing
+D_{11} &\equiv Hints=1, \\
+D_{12} &\equiv Threads\ne\varnothing, \\
+D_{13} &\equiv Mem\ne\varnothing, \\
+D_{14} &\equiv BatAPI=1, \\
+D_{15} &\equiv |Skew|>120000, \\
+D_{16} &\equiv HeapInfo=1, \\
+D_{17} &\equiv Lag>80, \\
+D_{18} &\equiv NetInfo=1.
 \end{aligned}
 $$
 
-Полная формула:
+Полная формула экспозиции:
 
 $$
 \begin{aligned}
-\mathrm{exposure\_score} = \min(100,\;&
-18J(D_{\mathrm{vpn\_like\_network}})
-+12J(D_{\mathrm{webrtc\_candidates}})
-+4J(D_{\mathrm{no\_ipv6}}) \\
-&+12J(D_{\mathrm{timezone\_ip\_conflict}})
-+5J(D_{\mathrm{language\_identifies\_user}})
-+24J(D_{\mathrm{network\_changed\_same\_device}}) \\
-&+10J(D_{\mathrm{webgl\_identifies\_device}})
-+1J(D_{\mathrm{webgl\_hidden}})
-+8J(D_{\mathrm{canvas\_available}})
-+6J(D_{\mathrm{audio\_available}}) \\
-&+6J(D_{\mathrm{ua\_hints\_available}})
-+4J(D_{\mathrm{cpu\_threads\_available}})
-+4J(D_{\mathrm{ram\_bucket\_available}}) \\
-&+5J(D_{\mathrm{battery\_available}})
-+10J(D_{\mathrm{clock\_skew}})
-+2J(D_{\mathrm{js\_heap\_available}}) \\
-&+5J(D_{\mathrm{event\_loop\_lag}})
-+2J(D_{\mathrm{network\_info\_available}})
+ES(x)=\min(100,\;&
+18J(D_{1})+12J(D_{2})+4J(D_{3})+12J(D_{4})+5J(D_{5}) \\
+&+24J(D_{6})+10J(D_{7})+1J(D_{8})+8J(D_{9})+6J(D_{10}) \\
+&+6J(D_{11})+4J(D_{12})+4J(D_{13})+5J(D_{14}) \\
+&+10J(D_{15})+2J(D_{16})+5J(D_{17})+2J(D_{18})
 )
 \end{aligned}
 $$
