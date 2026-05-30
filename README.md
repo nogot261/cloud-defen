@@ -107,21 +107,42 @@ USE_LLM=1 OLLAMA_MODEL=qwen3:8b uvicorn app.main:app --reload
 
 Итоговый риск считается как сумма баллов всех сработавших risk-сигналов с ограничением сверху:
 
-```text
-risk_score = min(sum(risk_signal_points), 100)
-```
+$$
+\mathrm{risk\_score} = \min \left( \sum \mathrm{risk\_signal\_points}, 100 \right)
+$$
 
 В математической форме:
 
-```text
-Пусть S = {s1, s2, ..., sn} - множество risk-сигналов.
-Для каждого сигнала si задан вес wi и логическое условие Ci(x).
+Пусть:
 
-Ii(x) = 1, если Ci(x) истинно
-Ii(x) = 0, если Ci(x) ложно
+$$
+S = \{s_1, s_2, \ldots, s_n\}
+$$
 
-risk_score(x) = min(100, Σ wi * Ii(x))
-```
+где $S$ - множество risk-сигналов.
+
+Для каждого сигнала $s_i$ задан вес $w_i$ и логическое условие $C_i(x)$.
+
+Индикатор срабатывания сигнала:
+
+$$
+I_i(x)=
+\begin{cases}
+1, & \text{если } C_i(x) = \mathrm{true}, \\
+0, & \text{если } C_i(x) = \mathrm{false}.
+\end{cases}
+$$
+
+Итоговая формула:
+
+$$
+\mathrm{risk\_score}(x)
+=
+\min \left(
+100,
+\sum_{i=1}^{n} w_i \cdot I_i(x)
+\right)
+$$
 
 Где `x` - текущий набор данных сессии:
 
@@ -143,22 +164,17 @@ x = {
 
 Уровень риска:
 
-```text
-0-24   -> low
-25-49  -> medium
-50-74  -> high
-75-100 -> critical
-```
-
 Формально уровень риска задается кусочной функцией:
 
-```text
-level(score) =
-  low,      если 0  <= score < 25
-  medium,   если 25 <= score < 50
-  high,     если 50 <= score < 75
-  critical, если 75 <= score <= 100
-```
+$$
+\mathrm{level}(r)=
+\begin{cases}
+\mathrm{low},      & 0 \le r < 25, \\
+\mathrm{medium},   & 25 \le r < 50, \\
+\mathrm{high},     & 50 \le r < 75, \\
+\mathrm{critical}, & 75 \le r \le 100.
+\end{cases}
+$$
 
 ### Логические условия risk-сигналов
 
@@ -173,124 +189,93 @@ TZC     = country_from_timezone(timezone)
 LANG    = language_region(accept_language)
 ```
 
-```text
-C_datacenter =
-  NT = "datacenter/hosting"
+$$
+\begin{aligned}
+C_{\mathrm{datacenter}} &\equiv NT = \mathrm{datacenter/hosting} \\
+C_{\mathrm{new\_country}} &\equiv PC \ne \varnothing \land country \notin PC \\
+C_{\mathrm{known\_device\_new\_region}} &\equiv device\_seen\_before \land PC \ne \varnothing \land country \notin PC \\
+C_{\mathrm{timezone\_mismatch}} &\equiv TZC \ne \varnothing \land country \ne \mathrm{UNKNOWN} \land TZC \ne country \\
+C_{\mathrm{language\_mismatch}} &\equiv LANG \ne \varnothing \land LANG \notin common\_language\_regions(country) \\
+C_{\mathrm{failed\_logins}} &\equiv failed\_logins\_last\_5\_min > 10 \\
+C_{\mathrm{mass\_download}} &\equiv downloaded\_docs\_last\_10\_min > 30 \\
+C_{\mathrm{api\_anomaly}} &\equiv protected\_requests\_last\_2\_min > 120 \\
+C_{\mathrm{webrtc\_leak}} &\equiv webrtc\_leak = true \\
+C_{\mathrm{no\_ipv6}} &\equiv ipv6\_enabled = false
+\end{aligned}
+$$
 
-C_new_country =
-  PC не пусто AND country ∉ PC
+$$
+\begin{aligned}
+C_{\mathrm{ip\_changed}} &\equiv PS.ip \ne \varnothing \land ip \ne \varnothing \land PS.ip \ne ip \\
+C_{\mathrm{country\_changed}} &\equiv PS.country \ne \varnothing \land country \ne \varnothing \land PS.country \ne country \\
+C_{\mathrm{asn\_changed}} &\equiv PS.asn \ne \varnothing \land asn \ne \varnothing \land PS.asn \ne asn \\
+C_{\mathrm{timezone\_changed\_without\_country}} &\equiv PS.timezone \ne timezone \land \neg C_{\mathrm{country\_changed}} \\
+C_{\mathrm{same\_device\_new\_network}} &\equiv FP \ne \varnothing \land PS.browser\_fingerprint\_hash = FP \\
+&\quad \land (C_{\mathrm{ip\_changed}} \lor C_{\mathrm{country\_changed}} \lor C_{\mathrm{asn\_changed}}) \\
+C_{\mathrm{gpu\_changed}} &\equiv PS.device\_profile.webgl\_renderer \ne \varnothing \\
+&\quad \land device\_profile.webgl\_renderer \ne \varnothing \\
+&\quad \land PS.device\_profile.webgl\_renderer \ne device\_profile.webgl\_renderer
+\end{aligned}
+$$
 
-C_known_device_new_region =
-  device_seen_before = true AND PC не пусто AND country ∉ PC
-
-C_timezone_mismatch =
-  TZC определен AND country != "UNKNOWN" AND TZC != country
-
-C_language_mismatch =
-  LANG определен AND LANG ∉ common_language_regions(country)
-
-C_failed_logins =
-  failed_logins_last_5_min > 10
-
-C_mass_download =
-  downloaded_docs_last_10_min > 30
-
-C_api_anomaly =
-  protected_requests_last_2_min > 120
-
-C_webrtc_leak =
-  webrtc_leak = true
-
-C_no_ipv6 =
-  ipv6_enabled = false
-
-C_ip_changed =
-  PS.ip определен AND ip определен AND PS.ip != ip
-
-C_country_changed =
-  PS.country определен AND country определен AND PS.country != country
-
-C_asn_changed =
-  PS.asn определен AND asn определен AND PS.asn != asn
-
-C_timezone_changed_without_country =
-  PS.timezone != timezone AND NOT C_country_changed
-
-C_same_device_new_network =
-  FP определен
-  AND PS.browser_fingerprint_hash = FP
-  AND (C_ip_changed OR C_country_changed OR C_asn_changed)
-
-C_gpu_changed =
-  PS.device_profile.webgl_renderer определен
-  AND device_profile.webgl_renderer определен
-  AND PS.device_profile.webgl_renderer != device_profile.webgl_renderer
-
-C_network_type_conflict =
-  network_profile.connection_type ∈ {"cellular", "none"}
-  AND NT = "datacenter/hosting"
-
-C_hybrid_fingerprint =
-  device_profile.touch_points > 0
-  AND "Win" входит в device_profile.platform
-
-C_clock_skew =
-  abs(device_profile.clock.server_skew_ms) > 120000
-
-C_low_battery =
-  battery.supported = true
-  AND battery.level_percent <= 10
-  AND battery.charging = false
-
-C_battery_api_hidden =
-  battery.supported = false
-
-C_high_js_heap =
-  performance.js_heap_usage_percent > 80
-
-C_event_loop_lag =
-  performance.event_loop_lag_ms > 80
-```
+$$
+\begin{aligned}
+C_{\mathrm{network\_type\_conflict}} &\equiv network\_profile.connection\_type \in \{\mathrm{cellular}, \mathrm{none}\} \\
+&\quad \land NT = \mathrm{datacenter/hosting} \\
+C_{\mathrm{hybrid\_fingerprint}} &\equiv device\_profile.touch\_points > 0 \land \mathrm{Win} \subset device\_profile.platform \\
+C_{\mathrm{clock\_skew}} &\equiv |device\_profile.clock.server\_skew\_ms| > 120000 \\
+C_{\mathrm{low\_battery}} &\equiv battery.supported \land battery.level\_percent \le 10 \land \neg battery.charging \\
+C_{\mathrm{battery\_api\_hidden}} &\equiv battery.supported = false \\
+C_{\mathrm{high\_js\_heap}} &\equiv performance.js\_heap\_usage\_percent > 80 \\
+C_{\mathrm{event\_loop\_lag}} &\equiv performance.event\_loop\_lag\_ms > 80
+\end{aligned}
+$$
 
 Таким образом, например, вклад признака “то же устройство, другая сеть” считается так:
 
-```text
-r_same_device_new_network = 20 * I(
-  FP = PS.browser_fingerprint_hash
-  AND (ip != PS.ip OR country != PS.country OR asn != PS.asn)
-)
-```
+$$
+r_{\mathrm{same\_device\_new\_network}}
+=
+20 \cdot
+\mathbb{1}
+\left[
+FP = PS.browser\_fingerprint\_hash
+\land
+(ip \ne PS.ip \lor country \ne PS.country \lor asn \ne PS.asn)
+\right]
+$$
 
 А общий риск можно разложить как:
 
-```text
-risk_score =
-min(100,
-  25 * I(C_datacenter)
-+ 15 * I(C_new_country)
-+ 15 * I(C_known_device_new_region)
-+ 10 * I(C_timezone_mismatch)
-+  5 * I(C_language_mismatch)
-+ 20 * I(C_failed_logins)
-+ 20 * I(C_mass_download)
-+ 10 * I(C_api_anomaly)
-+ 10 * I(C_webrtc_leak)
-+  2 * I(C_no_ipv6)
-+ 18 * I(C_ip_changed)
-+ 18 * I(C_country_changed)
-+ 12 * I(C_asn_changed)
-+  8 * I(C_timezone_changed_without_country)
-+ 20 * I(C_same_device_new_network)
-+ 10 * I(C_gpu_changed)
-+  8 * I(C_network_type_conflict)
-+  4 * I(C_hybrid_fingerprint)
-+ 10 * I(C_clock_skew)
-+  4 * I(C_low_battery)
-+  1 * I(C_battery_api_hidden)
-+  5 * I(C_high_js_heap)
-+  5 * I(C_event_loop_lag)
+$$
+\begin{aligned}
+\mathrm{risk\_score} = \min(100,\;&
+25I(C_{\mathrm{datacenter}})
++15I(C_{\mathrm{new\_country}})
++15I(C_{\mathrm{known\_device\_new\_region}}) \\
+&+10I(C_{\mathrm{timezone\_mismatch}})
++5I(C_{\mathrm{language\_mismatch}})
++20I(C_{\mathrm{failed\_logins}}) \\
+&+20I(C_{\mathrm{mass\_download}})
++10I(C_{\mathrm{api\_anomaly}})
++10I(C_{\mathrm{webrtc\_leak}})
++2I(C_{\mathrm{no\_ipv6}}) \\
+&+18I(C_{\mathrm{ip\_changed}})
++18I(C_{\mathrm{country\_changed}})
++12I(C_{\mathrm{asn\_changed}}) \\
+&+8I(C_{\mathrm{timezone\_changed\_without\_country}})
++20I(C_{\mathrm{same\_device\_new\_network}})
++10I(C_{\mathrm{gpu\_changed}}) \\
+&+8I(C_{\mathrm{network\_type\_conflict}})
++4I(C_{\mathrm{hybrid\_fingerprint}})
++10I(C_{\mathrm{clock\_skew}}) \\
+&+4I(C_{\mathrm{low\_battery}})
++1I(C_{\mathrm{battery\_api\_hidden}})
++5I(C_{\mathrm{high\_js\_heap}})
++5I(C_{\mathrm{event\_loop\_lag}})
 )
-```
+\end{aligned}
+$$
 
 ### Risk-сигналы
 
@@ -334,10 +319,17 @@ min(100,
 
 Тогда:
 
-```text
-risk_score = min(25 + 15 + 20 + 20 + 20, 100) = 100
-risk_level = critical
-```
+$$
+\mathrm{risk\_score}
+=
+\min(25 + 15 + 20 + 20 + 20,\;100)
+=
+100
+$$
+
+$$
+\mathrm{risk\_level} = \mathrm{critical}
+$$
 
 ## Формула экспозиции
 
@@ -347,113 +339,111 @@ risk_level = critical
 exposure_score = min(sum(exposure_finding_points), 100)
 ```
 
+$$
+\mathrm{exposure\_score}
+=
+\min \left( \sum \mathrm{exposure\_finding\_points}, 100 \right)
+$$
+
 Математическая запись аналогична risk-модели:
 
-```text
-Пусть E = {e1, e2, ..., em} - множество exposure-findings.
-Для каждого finding ej задан вес vj и условие Dj(x).
+Пусть:
 
-Jj(x) = 1, если Dj(x) истинно
-Jj(x) = 0, если Dj(x) ложно
+$$
+E = \{e_1, e_2, \ldots, e_m\}
+$$
 
-exposure_score(x) = min(100, Σ vj * Jj(x))
-```
+где $E$ - множество exposure-findings.
+
+Для каждого finding $e_j$ задан вес $v_j$ и условие $D_j(x)$.
+
+$$
+J_j(x)=
+\begin{cases}
+1, & \text{если } D_j(x) = \mathrm{true}, \\
+0, & \text{если } D_j(x) = \mathrm{false}.
+\end{cases}
+$$
+
+$$
+\mathrm{exposure\_score}(x)
+=
+\min \left(
+100,
+\sum_{j=1}^{m} v_j \cdot J_j(x)
+\right)
+$$
 
 Уровень экспозиции:
 
-```text
-0-24   -> low
-25-49  -> medium
-50-74  -> high
-75-100 -> critical
-```
+$$
+\mathrm{exposure\_level}(e)=
+\begin{cases}
+\mathrm{low},      & 0 \le e < 25, \\
+\mathrm{medium},   & 25 \le e < 50, \\
+\mathrm{high},     & 50 \le e < 75, \\
+\mathrm{critical}, & 75 \le e \le 100.
+\end{cases}
+$$
 
 ### Логические условия exposure-findings
 
-```text
-D_vpn_like_network =
-  NT = "datacenter/hosting"
+$$
+\begin{aligned}
+D_{\mathrm{vpn\_like\_network}} &\equiv NT = \mathrm{datacenter/hosting} \\
+D_{\mathrm{webrtc\_candidates}} &\equiv webrtc\_leak = true \\
+D_{\mathrm{no\_ipv6}} &\equiv ipv6\_enabled = false \\
+D_{\mathrm{timezone\_ip\_conflict}} &\equiv TZC \ne \varnothing \land TZC \ne country \\
+D_{\mathrm{language\_identifies\_user}} &\equiv LANG \ne \varnothing \land LANG \ne country \\
+D_{\mathrm{network\_changed\_same\_device}} &\equiv FP = PS.browser\_fingerprint\_hash \\
+&\quad \land (ip \ne PS.ip \lor country \ne PS.country \lor asn \ne PS.asn) \\
+D_{\mathrm{webgl\_identifies\_device}} &\equiv device\_profile.webgl\_renderer \ne \varnothing \\
+D_{\mathrm{webgl\_hidden}} &\equiv device\_profile.webgl\_supported = false \\
+D_{\mathrm{canvas\_available}} &\equiv canvas\_hash \ne \varnothing \land canvas\_hash \ne \mathrm{unavailable} \\
+D_{\mathrm{audio\_available}} &\equiv audio\_hash \ne \varnothing \land audio\_hash \notin \{\mathrm{unavailable}, \mathrm{blocked}\}
+\end{aligned}
+$$
 
-D_webrtc_candidates =
-  webrtc_leak = true
-
-D_no_ipv6 =
-  ipv6_enabled = false
-
-D_timezone_ip_conflict =
-  TZC определен AND TZC != country
-
-D_language_identifies_user =
-  LANG определен AND LANG != country
-
-D_network_changed_same_device =
-  FP = PS.browser_fingerprint_hash
-  AND (ip != PS.ip OR country != PS.country OR asn != PS.asn)
-
-D_webgl_identifies_device =
-  device_profile.webgl_renderer определен
-
-D_webgl_hidden =
-  device_profile.webgl_supported = false
-
-D_canvas_available =
-  canvas_hash определен AND canvas_hash != "unavailable"
-
-D_audio_available =
-  audio_hash определен
-  AND audio_hash ∉ {"unavailable", "blocked"}
-
-D_ua_hints_available =
-  ua_hints.available = true
-
-D_cpu_threads_available =
-  hardware_concurrency определен
-
-D_ram_bucket_available =
-  device_memory_gb определен
-
-D_battery_available =
-  battery.supported = true
-
-D_clock_skew =
-  abs(clock.server_skew_ms) > 120000
-
-D_js_heap_available =
-  performance.memory.supported = true
-
-D_event_loop_lag =
-  performance.event_loop_lag_ms > 80
-
-D_network_info_available =
-  network_profile.effective_type определен
-  OR network_profile.connection_type определен
-```
+$$
+\begin{aligned}
+D_{\mathrm{ua\_hints\_available}} &\equiv ua\_hints.available = true \\
+D_{\mathrm{cpu\_threads\_available}} &\equiv hardware\_concurrency \ne \varnothing \\
+D_{\mathrm{ram\_bucket\_available}} &\equiv device\_memory\_gb \ne \varnothing \\
+D_{\mathrm{battery\_available}} &\equiv battery.supported = true \\
+D_{\mathrm{clock\_skew}} &\equiv |clock.server\_skew\_ms| > 120000 \\
+D_{\mathrm{js\_heap\_available}} &\equiv performance.memory.supported = true \\
+D_{\mathrm{event\_loop\_lag}} &\equiv performance.event\_loop\_lag\_ms > 80 \\
+D_{\mathrm{network\_info\_available}} &\equiv network\_profile.effective\_type \ne \varnothing \\
+&\quad \lor network\_profile.connection\_type \ne \varnothing
+\end{aligned}
+$$
 
 Полная формула:
 
-```text
-exposure_score =
-min(100,
-  18 * J(D_vpn_like_network)
-+ 12 * J(D_webrtc_candidates)
-+  4 * J(D_no_ipv6)
-+ 12 * J(D_timezone_ip_conflict)
-+  5 * J(D_language_identifies_user)
-+ 24 * J(D_network_changed_same_device)
-+ 10 * J(D_webgl_identifies_device)
-+  1 * J(D_webgl_hidden)
-+  8 * J(D_canvas_available)
-+  6 * J(D_audio_available)
-+  6 * J(D_ua_hints_available)
-+  4 * J(D_cpu_threads_available)
-+  4 * J(D_ram_bucket_available)
-+  5 * J(D_battery_available)
-+ 10 * J(D_clock_skew)
-+  2 * J(D_js_heap_available)
-+  5 * J(D_event_loop_lag)
-+  2 * J(D_network_info_available)
+$$
+\begin{aligned}
+\mathrm{exposure\_score} = \min(100,\;&
+18J(D_{\mathrm{vpn\_like\_network}})
++12J(D_{\mathrm{webrtc\_candidates}})
++4J(D_{\mathrm{no\_ipv6}}) \\
+&+12J(D_{\mathrm{timezone\_ip\_conflict}})
++5J(D_{\mathrm{language\_identifies\_user}})
++24J(D_{\mathrm{network\_changed\_same\_device}}) \\
+&+10J(D_{\mathrm{webgl\_identifies\_device}})
++1J(D_{\mathrm{webgl\_hidden}})
++8J(D_{\mathrm{canvas\_available}})
++6J(D_{\mathrm{audio\_available}}) \\
+&+6J(D_{\mathrm{ua\_hints\_available}})
++4J(D_{\mathrm{cpu\_threads\_available}})
++4J(D_{\mathrm{ram\_bucket\_available}}) \\
+&+5J(D_{\mathrm{battery\_available}})
++10J(D_{\mathrm{clock\_skew}})
++2J(D_{\mathrm{js\_heap\_available}}) \\
+&+5J(D_{\mathrm{event\_loop\_lag}})
++2J(D_{\mathrm{network\_info\_available}})
 )
-```
+\end{aligned}
+$$
 
 ### Exposure-findings
 
