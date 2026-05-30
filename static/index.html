@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Explainable Cloud Risk Scoring</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <aside class="panel input-panel">
+          <div class="brand">
+            <span class="mark"></span>
+            <div>
+              <h1>Cloud Risk Monitor</h1>
+              <p>Объяснимый антифрод-анализ пользовательской сессии</p>
+            </div>
+          </div>
+
+          <div class="notice" id="autofillStatus">Автосбор еще не запускался.</div>
+
+          <label>IP адрес <input id="ip" placeholder="определится автоматически" /></label>
+          <label>Страна IP <input id="country" placeholder="например RU, LV, AM" /></label>
+          <label>ASN / провайдер <input id="asn" placeholder="определится автоматически, если доступен внешний lookup" /></label>
+          <label>Timezone <input id="timezone" /></label>
+          <label>Accept-Language <input id="accept_language" /></label>
+          <label>Предыдущие страны аккаунта <input id="previous_countries" placeholder="например RU, AM" /></label>
+
+          <div class="grid-2">
+            <label>Ошибки входа <input id="failed_logins" type="number" value="0" min="0" /></label>
+            <label>Скачано документов <input id="downloads" type="number" value="0" min="0" /></label>
+          </div>
+
+          <label>Запросы к защищенным ресурсам <input id="protected_requests" type="number" value="0" min="0" /></label>
+
+          <div class="toggles">
+            <label><input id="device_seen" type="checkbox" checked /> Устройство уже известно</label>
+            <label><input id="webrtc_leak" type="checkbox" /> WebRTC leak найден</label>
+            <label><input id="ipv6_enabled" type="checkbox" /> IPv6 включен</label>
+          </div>
+
+          <div class="actions">
+            <button id="detectSession">Моя сессия</button>
+            <button id="demoHigh">VPN-anomaly</button>
+            <button id="demoLow">Normal</button>
+            <button id="refreshAnalyze">Обновить и проверить</button>
+            <button id="analyze">Проверить сессию</button>
+          </div>
+        </aside>
+
+        <section class="panel result-panel">
+          <div class="score-row">
+            <div class="score-ring" id="scoreRing"><span id="score">--</span></div>
+            <div>
+              <p class="eyebrow">Risk score</p>
+              <h2 id="riskLevel">Ожидаю анализ</h2>
+              <p id="networkType">Нажми проверку, чтобы увидеть признаки и объяснение.</p>
+            </div>
+          </div>
+
+          <div class="metrics" id="metrics"></div>
+
+          <section>
+            <h3>Изменения с прошлой проверки</h3>
+            <div class="changes" id="changes"></div>
+          </section>
+
+          <section>
+            <h3>Отпечаток устройства</h3>
+            <div class="metrics fingerprint" id="fingerprint"></div>
+            <div class="notice limits">
+              Браузер может скрывать точную модель CPU, емкость батареи в mAh и реальную загрузку CPU/GPU/RAM всей ОС. В таких случаях система показывает доступные косвенные признаки: JS heap, FPS, event-loop lag и synthetic CPU benchmark.
+            </div>
+          </section>
+
+          <section>
+            <h3>Формульный анализ</h3>
+            <p class="provider" id="provider"></p>
+            <div class="explanation" id="explanation">
+              Анализ считается формульно по фактическим данным сессии. Локальная LLM опциональна и по умолчанию отключена.
+            </div>
+          </section>
+
+          <section>
+            <h3>Сигналы риска</h3>
+            <div class="signals" id="signals"></div>
+          </section>
+
+          <section>
+            <h3>Уязвимости и экспозиции</h3>
+            <div class="signals" id="exposures"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

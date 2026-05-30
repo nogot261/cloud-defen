@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: cloud-risk-monitor
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: USE_LLM
+        value: "0"
+      - key: PYTHONUNBUFFERED
+        value: "1"
