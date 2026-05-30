@@ -144,23 +144,17 @@ $$
 \right)
 $$
 
-Где `x` - текущий набор данных сессии:
+Где $x$ - текущий набор данных сессии:
 
-```text
-x = {
-  ip, asn, country, timezone, accept_language,
-  previous_countries,
-  failed_logins_last_5_min,
-  downloaded_docs_last_10_min,
-  protected_requests_last_2_min,
-  webrtc_leak,
-  ipv6_enabled,
-  browser_fingerprint_hash,
-  device_profile,
-  network_profile,
-  previous_snapshot
-}
-```
+$$
+\begin{aligned}
+x = (&ip,\ asn,\ country,\ timezone,\ accept\_language,\\
+&previous\_countries,\ failed\_logins\_last\_5\_min,\\
+&downloaded\_docs\_last\_10\_min,\ protected\_requests\_last\_2\_min,\\
+&webrtc\_leak,\ ipv6\_enabled,\ browser\_fingerprint\_hash,\\
+&device\_profile,\ network\_profile,\ previous\_snapshot)
+\end{aligned}
+$$
 
 Уровень риска:
 
@@ -180,18 +174,20 @@ $$
 
 Ниже приведены основные условия в логической форме. Обозначения:
 
-```text
-NT      = network_type
-PC      = previous_countries
-PS      = previous_snapshot
-FP      = browser_fingerprint_hash
-TZC     = country_from_timezone(timezone)
-LANG    = language_region(accept_language)
-```
+$$
+\begin{aligned}
+NT   &= network\_type \\
+PC   &= previous\_countries \\
+PS   &= previous\_snapshot \\
+FP   &= browser\_fingerprint\_hash \\
+TZC  &= country\_from\_timezone(timezone) \\
+LANG &= language\_region(accept\_language)
+\end{aligned}
+$$
 
 $$
 \begin{aligned}
-C_{\mathrm{datacenter}} &\equiv NT = \mathrm{datacenter/hosting} \\
+C_{\mathrm{datacenter}} &\equiv NT = \text{datacenter/hosting} \\
 C_{\mathrm{new\_country}} &\equiv PC \ne \varnothing \land country \notin PC \\
 C_{\mathrm{known\_device\_new\_region}} &\equiv device\_seen\_before \land PC \ne \varnothing \land country \notin PC \\
 C_{\mathrm{timezone\_mismatch}} &\equiv TZC \ne \varnothing \land country \ne \mathrm{UNKNOWN} \land TZC \ne country \\
@@ -221,8 +217,8 @@ $$
 $$
 \begin{aligned}
 C_{\mathrm{network\_type\_conflict}} &\equiv network\_profile.connection\_type \in \{\mathrm{cellular}, \mathrm{none}\} \\
-&\quad \land NT = \mathrm{datacenter/hosting} \\
-C_{\mathrm{hybrid\_fingerprint}} &\equiv device\_profile.touch\_points > 0 \land \mathrm{Win} \subset device\_profile.platform \\
+&\quad \land NT = \text{datacenter/hosting} \\
+C_{\mathrm{hybrid\_fingerprint}} &\equiv device\_profile.touch\_points > 0 \land \text{Win} \in device\_profile.platform \\
 C_{\mathrm{clock\_skew}} &\equiv |device\_profile.clock.server\_skew\_ms| > 120000 \\
 C_{\mathrm{low\_battery}} &\equiv battery.supported \land battery.level\_percent \le 10 \land \neg battery.charging \\
 C_{\mathrm{battery\_api\_hidden}} &\equiv battery.supported = false \\
@@ -335,10 +331,6 @@ $$
 
 Экспозиция показывает, насколько много признаков браузер и сеть раскрывают для идентификации или антифрод-анализа.
 
-```text
-exposure_score = min(sum(exposure_finding_points), 100)
-```
-
 $$
 \mathrm{exposure\_score}
 =
@@ -390,7 +382,7 @@ $$
 
 $$
 \begin{aligned}
-D_{\mathrm{vpn\_like\_network}} &\equiv NT = \mathrm{datacenter/hosting} \\
+D_{\mathrm{vpn\_like\_network}} &\equiv NT = \text{datacenter/hosting} \\
 D_{\mathrm{webrtc\_candidates}} &\equiv webrtc\_leak = true \\
 D_{\mathrm{no\_ipv6}} &\equiv ipv6\_enabled = false \\
 D_{\mathrm{timezone\_ip\_conflict}} &\equiv TZC \ne \varnothing \land TZC \ne country \\
